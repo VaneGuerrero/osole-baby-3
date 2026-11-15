@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- O'Sole Baby · Filtro de fotos · v1.1.1 (2026-11-02) · ver CHANGELOG.md -->
+<!-- O'Sole Baby · Filtro de fotos · v1.2.0 (2026-11-11) simple: cámara automática, 1 foto, «¡Listo! Continuar» -->
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -78,8 +78,7 @@
   .thumb span { padding:2px 0; }
   .thumb.active { border-color:var(--pink); }
   .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-  #done { flex-direction:column; align-items:stretch; flex-wrap:nowrap; width:min(340px,90vw); gap:8px; }
-  #done button { width:100%; padding:10px 16px; font-size:.92rem; line-height:1.2; }
+  #done { flex-direction:column; align-items:center; flex-wrap:nowrap; width:min(340px,90vw); gap:8px; }
   button { font:inherit; font-weight:700; border:0; border-radius:999px; padding:12px 24px;
            background:var(--pink); color:#fff; cursor:pointer; }
   button.sec { background:#fff; color:#e0345c; border:2px solid var(--pink); }
@@ -91,7 +90,9 @@
   button.ig { background:var(--teal); }
   /* Pantalla de resultado: sin miniaturas, marco centrado y un poco más bajo para que quepan los 3 botones */
   body.done #thumbs { display:none; }
-  body.done #stage { height:min(calc(100dvh - 290px), calc((100vw - 24px) * 16 / 9)); }
+  body.done #stage { height:min(calc(100dvh - 200px), calc((100vw - 24px) * 16 / 9)); }
+  .big { font-size:1.15rem; font-weight:800; min-height:58px; padding:14px 34px; min-width:min(300px,86vw); }
+  #go { background:var(--teal); box-shadow:0 4px 14px rgba(14,148,136,.35); }
   body.done #msg { min-height:1.3em; }
   #ver { position:fixed; top:3px; right:7px; font:600 10px/1 system-ui,sans-serif; color:var(--ink); opacity:.45; pointer-events:none; z-index:5; }
   /* Panel de debug */
@@ -139,27 +140,26 @@
 
   </div>
 
-  <p id="msg">Pulsa «Activar cámara» y acepta el permiso.</p>
+  <p id="msg">Abriendo la cámara…</p>
 
   <div class="row" id="live">
-    <button id="start">Activar cámara</button>
-    <button id="shoot" hidden>Tomar foto</button>
+    <button id="start" class="big" hidden>📸 Activar cámara</button>
+    <button id="shoot" class="big" hidden>📸 Tomar foto</button>
     <button id="flip" class="sec" hidden>Girar cámara</button>
     <button id="reload" class="sec" hidden>Recargar la página</button>
   </div>
   <div class="row" id="done" hidden>
-    <button id="retry" class="sec">Repite la foto si no te gustó</button>
-    <button id="download">Descarga y guarda tu foto</button>
-    <button id="points" class="ig">Sube tu foto y suma puntos</button>
+    <button id="go" class="big">¡Listo! Continuar</button>
   </div>
 
 <script>
 /* ===== Versión (cambia en cada entrega; ver CHANGELOG.md) ===== */
-const APP_VERSION = "1.1.1", APP_DATE = "2026-11-02";
+const APP_VERSION = "1.2.0", APP_DATE = "2026-11-11";
 
 const W = 1080, H = 1920;                 // tamaño de cada marco
 const ZOOM = 0.6;                         // cuánto de la cámara cabe en el círculo (menor = más zoom)
-const POINTS_URL = "https://app.supertize.com/content/764057?embedded_project=true";
+const POINTS_URL = (() => { const v = new URLSearchParams(location.search).get("volver");
+  return v && /^https:\/\//.test(v) ? v : "https://app.supertize.com/content/764057?embedded_project=true"; })();
 const IOS_SAVE_WITH_SHARE = false;        // false = en iPhone también descarga directa (Archivos → Descargas); true = menú «Guardar imagen»
 
 /* Marcos: hx, hy = centro del círculo del rostro; d = diámetro del círculo */
@@ -413,8 +413,8 @@ async function openCamera() {
   $("shoot").hidden = false;
   let cams = 2;
   try { cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput").length; } catch (e) {}
-  $("flip").hidden = cams < 2;                        // sin segunda cámara no se muestra «Girar»
-  msg.textContent = "Coloca tu cara dentro del círculo y pulsa «Tomar foto».";
+  $("flip").hidden = true;                            // simple: siempre cámara frontal
+  msg.textContent = "Elige tu animalito, pon tu cara en el círculo y toca «Tomar foto».";
 }
 
 async function startCam() {
@@ -455,7 +455,7 @@ async function startCam() {
   if (!navigator.mediaDevices) return;
   const st = await camState();
   dbg("permiso", "estado inicial: " + st);
-  if (st === "granted" && !document.hidden) startCam();
+  if (!document.hidden) startCam();                  // simple: la cámara se abre sola al entrar
 })();
 document.addEventListener("visibilitychange", () => {
   if (finished) return;
@@ -494,7 +494,7 @@ async function shoot() {
     result.src = photoURL; result.style.display = "block";
     document.body.classList.add("done");
     $("live").hidden = true; $("done").hidden = false;
-    msg.textContent = "¿Te gusta? Descárgala o súbela para sumar puntos.";
+    msg.textContent = "¡Quedaste genial! Toca «¡Listo! Continuar».";
     stopStream();
     dbg("foto", "tomada", { marco: f.id, bytes: b.size, video: cam.videoWidth + "x" + cam.videoHeight });
   } catch (e) {
@@ -525,10 +525,21 @@ async function saveFoto() {
                           : "¡Foto descargada! Si no la ves, mantén presionada la imagen y elige «Guardar imagen».";
 }
 
-/* Botón 3: ir a sumar puntos (misma pestaña) */
+/* Botón único: guarda y continúa al reto */
+let saved = false;
+async function onGo() {
+  if (!blob) return;
+  if (saved) { goPoints(); return; }
+  saved = true; await saveFoto();
+  $("go").textContent = "Continuar";
+  if (isIOS) msg.textContent = "En el aviso del iPhone toca «Descargar» y luego «Continuar».";
+  else { msg.textContent = "¡Guardada! ✓ Continuando…"; setTimeout(goPoints, 1500); }
+}
+/* ir a sumar puntos (misma pestaña) */
 function goPoints() {
   if (going) return; going = true;
   dbg("ui", "ir a sumar puntos");
+  msg.textContent = "Continuando…";
   window.location.href = POINTS_URL;
 }
 
@@ -546,9 +557,7 @@ $("start").onclick = () => { autoRetried = false; startCam(); };
 $("reload").onclick = () => { dbg("ui", "recargar página"); location.reload(); };
 $("shoot").onclick = shoot;
 $("flip").onclick = () => { if (starting) return; facing = facing === "user" ? "environment" : "user"; dbg("ui", "girar cámara → " + facing); startCam(); };
-$("retry").onclick = retry;
-$("download").onclick = saveFoto;
-$("points").onclick = goPoints;
+$("go").onclick = onGo;
 select(0);
 if (/[?&]debug(=1|=true|&|$)/.test(location.search)) dbgSet(true);
 
